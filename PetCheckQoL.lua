@@ -193,6 +193,18 @@ end
 -- =========================================================
 -- Core Update Logic
 -- =========================================================
+local function IsInFlight()
+    -- Taxi flights (gryphon/wyvern/flightmaster) are the most common "in flight" state.
+    if UnitOnTaxi and UnitOnTaxi("player") then
+        return true
+    end
+    -- Some clients expose IsFlying(); it can be true for certain flight states.
+    if IsFlying and IsFlying() then
+        return true
+    end
+    return false
+end
+
 local function IsPetMissing()
     return not UnitExists("pet")
 end
@@ -203,6 +215,12 @@ local function UpdatePetWarning()
     end
 
     if not UnitExists("player") then
+        warningFrame:Hide()
+        return
+    end
+
+    -- Don't nag while you're on a taxi/flight.
+    if IsInFlight() then
         warningFrame:Hide()
         return
     end
@@ -659,6 +677,9 @@ frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+frame:RegisterEvent("PLAYER_CONTROL_LOST")
+frame:RegisterEvent("PLAYER_CONTROL_GAINED")
+frame:RegisterEvent("UNIT_FLAGS")
 
 frame:SetScript("OnEvent", function(_, event, unit)
     if event == "PLAYER_ENTERING_WORLD" then
@@ -672,6 +693,13 @@ frame:SetScript("OnEvent", function(_, event, unit)
         C_Timer.After(0, UpdatePetWarning)
         C_Timer.After(0.25, UpdatePetWarning)
         C_Timer.After(1.0, UpdatePetWarning)
+    end
+
+    if event == "UNIT_FLAGS" then
+        if unit == "player" then
+            UpdatePetWarning()
+        end
+        return
     end
 
     if event == "UNIT_PET" then
