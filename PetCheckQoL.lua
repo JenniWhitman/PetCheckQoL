@@ -5,8 +5,9 @@
 local addonName = ...
 local frame = CreateFrame("Frame")
 
--- SavedVariables
+-- SavedVariables (initialized on ADDON_LOADED so SavedVariablesPerCharacter is definitely ready)
 PetCheckQoLDB = PetCheckQoLDB or {}
+local INITIALIZED = false
 
 -- =========================================================
 -- Config
@@ -44,8 +45,12 @@ local function CopyDefaults(dst, src)
     end
 end
 
-CopyDefaults(PetCheckQoLDB, DEFAULTS)
-CONFIG = PetCheckQoLDB
+local function InitializeSavedVars()
+    PetCheckQoLDB = PetCheckQoLDB or {}
+    CopyDefaults(PetCheckQoLDB, DEFAULTS)
+    CONFIG = PetCheckQoLDB
+    INITIALIZED = true
+end
 
 -- =========================================================
 -- Warning Frame
@@ -91,8 +96,9 @@ local function ApplyTextStyle()
     warningText:SetShadowColor(s[1], s[2], s[3], s[4])
 end
 
-ApplyTextStyle()
-warningText:SetText(CONFIG.text or DEFAULTS.text)
+-- Defer applying fonts/text until SavedVariables are initialized (ADDON_LOADED)
+-- ApplyTextStyle()
+-- warningText:SetText(CONFIG.text or DEFAULTS.text)
 
 -- Optional backdrop-ish drag helper (invisible unless moving)
 warningFrame:SetMovable(true)
@@ -194,12 +200,23 @@ end
 -- Core Update Logic
 -- =========================================================
 local function IsInFlight()
-    -- Taxi flights (gryphon/wyvern/flightmaster) are the most common "in flight" state.
+    -- Taxi flights (flight master taxi)
     if UnitOnTaxi and UnitOnTaxi("player") then
         return true
     end
     -- Some clients expose IsFlying(); it can be true for certain flight states.
     if IsFlying and IsFlying() then
+        return true
+    end
+    return false
+end
+
+local function IsMountedOrInTransit()
+    if IsInFlight() then
+        return true
+    end
+    -- Hide while mounted (ground or flying mount). This avoids nagging during travel.
+    if IsMounted and IsMounted() then
         return true
     end
     return false
@@ -219,8 +236,8 @@ local function UpdatePetWarning()
         return
     end
 
-    -- Don't nag while you're on a taxi/flight.
-    if IsInFlight() then
+    -- Don't nag while you're traveling (taxi/flight) or mounted.
+    if IsMountedOrInTransit() then
         warningFrame:Hide()
         return
     end
@@ -671,6 +688,7 @@ end
 -- =========================================================
 -- Events
 -- =========================================================
+frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("UNIT_PET")
 frame:RegisterEvent("PLAYER_ALIVE")
@@ -680,19 +698,65 @@ frame:RegisterEvent("PLAYER_TALENT_UPDATE")
 frame:RegisterEvent("PLAYER_CONTROL_LOST")
 frame:RegisterEvent("PLAYER_CONTROL_GAINED")
 frame:RegisterEvent("UNIT_FLAGS")
+frame:RegisterEvent("PLAYER_MOUNT_DISPLAY_CHANGED")
+frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("PLAYER_LOGOUT")
 
 frame:SetScript("OnEvent", function(_, event, unit)
+    if event == "ADDON_LOADED" then
+        if unit == addonName then
+            InitializeSavedVars()
+            -- Apply saved state now that SV are guaranteed loaded
+            warningFrame:ClearAllPoints()
+            warningFrame:SetPoint("CENTER", UIParent, "CENTER", CONFIG.x, CONFIG.y)
+            ApplyTextStyle()
+            warningText:SetText(CONFIG.text or DEFAULTS.text)
+            -- If options panel already exists, let it refresh when opened
+        end
+        return
+    end
+
+    -- Guard: ignore other events until SV init is complete
+    if not INITIALIZED then
+        return
+    end
+    if event == "PLAYER_LOGOUT" then
+        -- Force SavedVariables table to contain the current config and stamp a debug time.
+        PetCheckQoLDB = CONFIG
+        if type(PetCheckQoLDB) == "table" then
+            PetCheckQoLDB._lastSavedAt = date and date("%Y-%m-%d %H:%M:%S") or time()
+        end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
         RegisterOptionsPanel()
         warningFrame:ClearAllPoints()
         warningFrame:SetPoint("CENTER", UIParent, "CENTER", CONFIG.x, CONFIG.y)
+
+        -- Re-apply saved style/text on enter world (after UI globals are fully initialized)
         ApplyTextStyle()
+        warningText:SetText(CONFIG.text or DEFAULTS.text)
+
+        -- Debug: uncomment if you suspect SV load order issues
+        -- print("|cffb58cff[PetCheck]|r Loaded SV text:", tostring(CONFIG.text))
 
         -- WoW can fire PLAYER_ENTERING_WORLD before all unit/spec data is fully ready.
         -- Do a few delayed retries so the warning appears reliably on login/reload.
         C_Timer.After(0, UpdatePetWarning)
         C_Timer.After(0.25, UpdatePetWarning)
         C_Timer.After(1.0, UpdatePetWarning)
+    end
+
+    if event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
+        UpdatePetWarning()
+        return
+    end
+
+    if event == "UNIT_AURA" then
+        if unit == "player" then
+            UpdatePetWarning()
+        end
+        return
     end
 
     if event == "UNIT_FLAGS" then
@@ -759,12 +823,14 @@ SlashCmdList["PETCHECKQOL"] = function(msg)
             petStatus
         ))
         print(string.format(
-            "|cffb58cff[PetCheck]|r Pos=(%d,%d) Font=%s Size=%d Color=%.2f,%.2f,%.2f,%.2f",
+            "|cffb58cff[PetCheck]|r Pos=(%d,%d) Font=%s Size=%d Color=%.2f,%.2f,%.2f,%.2f Text=%s SavedAt=%s",
             CONFIG.x,
             CONFIG.y,
             tostring(CONFIG.fontPath),
             CONFIG.fontSize,
-            CONFIG.color[1], CONFIG.color[2], CONFIG.color[3], CONFIG.color[4]
+            CONFIG.color[1], CONFIG.color[2], CONFIG.color[3], CONFIG.color[4],
+            tostring(CONFIG.text),
+            tostring(CONFIG._lastSavedAt)
         ))
         return
     end

@@ -3,6 +3,6 @@
 ## Notes: Warns you if you don't have a pet summoned.
 ## Author: Jenni
 ## Version: 0.0.1
-## SavedVariables: PetCheckQoLDB
+## SavedVariablesPerCharacter: PetCheckQoLDB
 
 PetCheckQoL.lua
