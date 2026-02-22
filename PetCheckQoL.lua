@@ -296,15 +296,33 @@ local function OpenColorPicker(initial, onApply)
         return
     end
 
-    local prev = { initial[1], initial[2], initial[3], initial[4] or 1 }
+    -- Copy initial to avoid mutation surprises
+    local prev = { initial[1] or 1, initial[2] or 1, initial[3] or 1, initial[4] or 1 }
+
+    local function readCurrent()
+        local r, g, b = ColorPickerFrame:GetColorRGB()
+        local a = 1
+        if OpacitySliderFrame and OpacitySliderFrame.GetValue then
+            -- Opacity slider is "opacity" (0 = opaque, 1 = transparent)
+            a = 1 - OpacitySliderFrame:GetValue()
+        end
+        return r, g, b, a
+    end
+
     local function apply(restore)
         local r, g, b, a
         if restore then
-            r, g, b, a = unpack(restore)
+            -- restore may be a table of {r,g,b,a} depending on client
+            if type(restore) == "table" then
+                r = restore[1]
+                g = restore[2]
+                b = restore[3]
+                a = restore[4] or 1
+            else
+                r, g, b, a = unpack(prev)
+            end
         else
-            local c = ColorPickerFrame:GetColorRGB()
-            r, g, b = c.r, c.g, c.b
-            a = 1 - (OpacitySliderFrame and OpacitySliderFrame:GetValue() or 0)
+            r, g, b, a = readCurrent()
         end
         onApply(r, g, b, a)
     end
