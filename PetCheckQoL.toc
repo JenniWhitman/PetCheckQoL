@@ -1,0 +1,8 @@
+## Interface: 120001, 120000
+## Title: Pet Check QoL
+## Notes: Warns you if you don't have a pet summoned.
+## Author: Jenni
+## Version: 0.0.1
+## SavedVariables: PetCheckQoLDB
+
+PetCheckQoL.lua
