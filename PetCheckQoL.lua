@@ -66,7 +66,8 @@ end
 -- =========================================================
 local warningFrame = CreateFrame("Frame", "PetCheckQoLWarningFrame", UIParent)
 warningFrame:SetSize(900, 80)
-warningFrame:SetPoint("CENTER", UIParent, "CENTER", CONFIG.x, CONFIG.y)
+-- Use defaults at load time; SavedVariables are applied after ADDON_LOADED.
+warningFrame:SetPoint("CENTER", UIParent, "CENTER", DEFAULTS.x, DEFAULTS.y)
 warningFrame:Hide()
 
 local warningText = warningFrame:CreateFontString(nil, "OVERLAY")
@@ -139,7 +140,7 @@ local function SetMoveMode(enabled)
         warningText:SetText("|cffb58cff[PetCheck]|r Drag me (left-click)\nType /petcheck lock when done")
         warningText:SetFont(((type(STANDARD_TEXT_FONT) == "string" and STANDARD_TEXT_FONT ~= "") and STANDARD_TEXT_FONT or DEFAULTS.fontPath), 20, "OUTLINE")
     else
-        warningText:SetText(CONFIG.text)
+        warningText:SetText(CONFIG.text or DEFAULTS.text)
         ApplyTextStyle()
         -- Refresh actual visibility based on pet state
     end
@@ -208,6 +209,20 @@ end
 -- =========================================================
 -- Core Update Logic
 -- =========================================================
+-- Debounce frequent events (mount swaps can spam auras/flags quickly)
+local UpdatePetWarning -- forward declaration (used by RequestUpdate)
+local _pendingUpdate = false
+local function RequestUpdate()
+    if _pendingUpdate then return end
+    _pendingUpdate = true
+    C_Timer.After(0.12, function()
+        _pendingUpdate = false
+        if INITIALIZED then
+            UpdatePetWarning()
+        end
+    end)
+end
+
 local function IsInFlight()
     -- Taxi flights (flight master taxi)
     if UnitOnTaxi and UnitOnTaxi("player") then
@@ -235,7 +250,7 @@ local function IsPetMissing()
     return not UnitExists("pet")
 end
 
-local function UpdatePetWarning()
+UpdatePetWarning = function()
     if warningFrame.isMoving then
         return -- don't override while dragging
     end
@@ -257,7 +272,7 @@ local function UpdatePetWarning()
     end
 
     if IsPetMissing() then
-        warningText:SetText(CONFIG.text)
+        warningText:SetText(CONFIG.text or DEFAULTS.text)
         ApplyTextStyle()
         warningFrame:Show()
     else
@@ -528,7 +543,7 @@ local function RegisterOptionsPanel()
             newText = DEFAULTS.text
         end
         CONFIG.text = string.upper(newText)
-        warningText:SetText(CONFIG.text)
+        warningText:SetText(CONFIG.text or DEFAULTS.text)
         ApplyTextStyle()
         UpdatePetWarning()
         textInput:SetText(CONFIG.text)
@@ -748,38 +763,35 @@ frame:SetScript("OnEvent", function(_, event, unit)
         ApplyTextStyle()
         warningText:SetText(CONFIG.text or DEFAULTS.text)
 
-        -- Debug: uncomment if you suspect SV load order issues
-        -- print("|cffb58cff[PetCheck]|r Loaded SV text:", tostring(CONFIG.text))
-
         -- WoW can fire PLAYER_ENTERING_WORLD before all unit/spec data is fully ready.
         -- Do a few delayed retries so the warning appears reliably on login/reload.
-        C_Timer.After(0, UpdatePetWarning)
-        C_Timer.After(0.25, UpdatePetWarning)
-        C_Timer.After(1.0, UpdatePetWarning)
+        C_Timer.After(0, RequestUpdate)
+        C_Timer.After(0.25, RequestUpdate)
+        C_Timer.After(1.0, RequestUpdate)
     end
 
     if event == "PLAYER_MOUNT_DISPLAY_CHANGED" then
-        UpdatePetWarning()
+        RequestUpdate()
         return
     end
 
     if event == "UNIT_AURA" then
         if unit == "player" then
-            UpdatePetWarning()
+            RequestUpdate()
         end
         return
     end
 
     if event == "UNIT_FLAGS" then
         if unit == "player" then
-            UpdatePetWarning()
+            RequestUpdate()
         end
         return
     end
 
     if event == "UNIT_PET" then
         if unit == "player" then
-            UpdatePetWarning()
+            RequestUpdate()
         end
         return
     end
@@ -802,7 +814,7 @@ SlashCmdList["PETCHECKQOL"] = function(msg)
     local lmsg = msg:lower()
 
     if lmsg == "test" then
-        warningText:SetText(CONFIG.text)
+        warningText:SetText(CONFIG.text or DEFAULTS.text)
         ApplyTextStyle()
         warningFrame:Show()
         print("|cffb58cff[PetCheck]|r Test message shown.")
