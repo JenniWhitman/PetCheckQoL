@@ -21,6 +21,7 @@ local DEFAULTS = {
     y = 180,
     color = { 0.72, 0.45, 1.0, 1.0 },
     shadowColor = { 0, 0, 0, 1 },
+    customFonts = {},
 
     -- Hunter behavior:
     -- true  = warn MM hunters too
@@ -35,6 +36,8 @@ local DEFAULTS = {
 local CONFIG = {}
 
 local function CopyDefaults(dst, src)
+    if type(dst) ~= "table" then return end
+    if type(src) ~= "table" then return end
     for k, v in pairs(src) do
         if type(v) == "table" then
             dst[k] = dst[k] or {}
@@ -48,6 +51,12 @@ end
 local function InitializeSavedVars()
     PetCheckQoLDB = PetCheckQoLDB or {}
     CopyDefaults(PetCheckQoLDB, DEFAULTS)
+
+    -- Hardening: if any saved fields are the wrong type (corrupt/old SV), fix them.
+    if type(PetCheckQoLDB.color) ~= "table" then PetCheckQoLDB.color = { unpack(DEFAULTS.color) } end
+    if type(PetCheckQoLDB.shadowColor) ~= "table" then PetCheckQoLDB.shadowColor = { unpack(DEFAULTS.shadowColor) } end
+    if type(PetCheckQoLDB.customFonts) ~= "table" then PetCheckQoLDB.customFonts = {} end
+
     CONFIG = PetCheckQoLDB
     INITIALIZED = true
 end
@@ -267,7 +276,8 @@ local FONT_ALIASES = {
     skurri = "Fonts\\skurri.ttf",
 }
 
-CONFIG.customFonts = CONFIG.customFonts or {}
+-- NOTE: customFonts is per-character SavedVariables. It will be created via DEFAULTS + CopyDefaults.
+-- Always guard with (CONFIG.customFonts or {}) in case something is nil on a fresh character.
 
 local function GetCombinedFontOptions()
     local options = {
@@ -278,7 +288,8 @@ local function GetCombinedFontOptions()
         { text = "Skurri", path = FONT_ALIASES.skurri },
     }
 
-    for name, path in pairs(CONFIG.customFonts) do
+    local customFonts = (type(CONFIG.customFonts) == "table") and CONFIG.customFonts or {}
+    for name, path in pairs(customFonts) do
         if type(name) == "string" and name ~= "" and type(path) == "string" and path ~= "" then
             table.insert(options, { text = name, path = path, isCustom = true })
         end
@@ -925,6 +936,7 @@ SlashCmdList["PETCHECKQOL"] = function(msg)
             print("|cffb58cff[PetCheck]|r Could not load that font path.")
             return
         end
+        CONFIG.customFonts = CONFIG.customFonts or {}
         CONFIG.customFonts[name] = path
         CONFIG.fontPath = path
         ApplyTextStyle()
@@ -936,8 +948,10 @@ SlashCmdList["PETCHECKQOL"] = function(msg)
     local delFontArg = string.match(msg, "^delfont%s+(.+)$")
     if delFontArg then
         local name = delFontArg:gsub("^%s+", ""):gsub("%s+$", "")
+        CONFIG.customFonts = CONFIG.customFonts or {}
         if CONFIG.customFonts[name] then
             local removedPath = CONFIG.customFonts[name]
+            CONFIG.customFonts = CONFIG.customFonts or {}
             CONFIG.customFonts[name] = nil
             if CONFIG.fontPath == removedPath then
                 CONFIG.fontPath = DEFAULTS.fontPath
@@ -954,7 +968,7 @@ SlashCmdList["PETCHECKQOL"] = function(msg)
     local fontArg = string.match(msg, "^font%s+(.+)$")
     if fontArg then
         local key = string.lower(fontArg)
-        local fontPath = FONT_ALIASES[key] or CONFIG.customFonts[fontArg] or fontArg
+        local fontPath = FONT_ALIASES[key] or (CONFIG.customFonts and CONFIG.customFonts[fontArg]) or fontArg
         local ok = warningText:SetFont(fontPath, CONFIG.fontSize, "OUTLINE")
         if not ok then
             print("|cffb58cff[PetCheck]|r Invalid font. Try a built-in, a custom font name, or a full font path.")
