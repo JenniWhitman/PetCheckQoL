@@ -122,7 +122,7 @@ local function SetMoveMode(enabled)
         -- Show helper text while moving
         warningFrame:Show()
         warningText:SetText("|cffb58cff[PetCheck]|r Drag me (left-click)\nType /petcheck lock when done")
-        warningText:SetFont(STANDARD_TEXT_FONT, 20, "OUTLINE")
+        warningText:SetFont(((type(STANDARD_TEXT_FONT) == "string" and STANDARD_TEXT_FONT ~= "") and STANDARD_TEXT_FONT or DEFAULTS.fontPath), 20, "OUTLINE")
     else
         warningText:SetText(CONFIG.text)
         ApplyTextStyle()
@@ -597,6 +597,7 @@ local function RegisterOptionsPanel()
         CONFIG.color[1], CONFIG.color[2], CONFIG.color[3], CONFIG.color[4] = unpack(DEFAULTS.color)
         CONFIG.shadowColor[1], CONFIG.shadowColor[2], CONFIG.shadowColor[3], CONFIG.shadowColor[4] = unpack(DEFAULTS.shadowColor)
         CONFIG.x, CONFIG.y = DEFAULTS.x, DEFAULTS.y
+        CONFIG.text = DEFAULTS.text
 
         warningFrame:ClearAllPoints()
         warningFrame:SetPoint("CENTER", UIParent, "CENTER", CONFIG.x, CONFIG.y)
@@ -615,6 +616,7 @@ local function RegisterOptionsPanel()
         dkCheck:SetChecked(CONFIG.warnDeathKnight)
         dkNonUhCheck:SetChecked(CONFIG.warnNonUnholyDK)
         UIDropDownMenu_SetText(fontDropdown, GetFontDropdownLabel())
+        textInput:SetText(CONFIG.text or DEFAULTS.text)
         sizeInput:SetText(tostring(CONFIG.fontSize))
         colorInput:SetText(FormatColor(CONFIG.color))
         shadowInput:SetText(FormatColor(CONFIG.shadowColor))
